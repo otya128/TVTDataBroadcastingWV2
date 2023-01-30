@@ -2,6 +2,7 @@ import { ComponentPMT, ResponseMessage } from "../web-bml/server/ws_api";
 import { BMLBrowser, BMLBrowserFontFace, EPG, Indicator, IP, InputApplication, InputCancelReason, InputCharacterType } from "../web-bml/client/bml_browser";
 import { decodeTS } from "../web-bml/server/decode_ts";
 import { CaptionPlayer } from "../web-bml/client/player/caption_player";
+import { SVGProvider, SVGProviderOption } from "aribb24.js";
 
 declare global {
     interface Window {
@@ -95,6 +96,19 @@ remoteControlStatusContainer.style.visibility = "hidden";
 
 const ccStatus = document.getElementById("cc-status")!;
 
+const ccSVG = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+const superSVG = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+const captionOption: SVGProviderOption = {
+    normalFont: "丸ゴシック",
+    forceStrokeColor: true,
+};
+ccSVG.style.position = "absolute";
+ccSVG.style.left = "0px";
+ccSVG.style.top = "0px";
+superSVG.style.position = "absolute";
+superSVG.style.left = "0px";
+superSVG.style.top = "0px";
+ccContainer.append(ccSVG, superSVG);
 const ccStatusAnimation = ccStatus.animate([{ visibility: "hidden", offset: 1 }], {
     duration: 2000,
     fill: "forwards",
@@ -453,7 +467,7 @@ function onMessage(msg: ResponseMessage) {
 const tsStream = decodeTS({
     sendCallback: onMessage,
     serviceId,
-    parsePES: true,
+//    parsePES: true,
 });
 
 tsStream.on("data", () => { });
@@ -466,6 +480,9 @@ type ToWebViewMessage = {
     type: "streamBase64",
     data: string,
     time?: number,
+} | {
+    type: "pes",
+    data: string,
 } | {
     type: "key",
     keyCode: number,
@@ -535,6 +552,24 @@ function onWebViewMessage(data: ToWebViewMessage, reply: (data: FromWebViewMessa
         const curPCR = pcr;
         if (prevPCR !== curPCR && curPCR != null) {
             player.updateTime(curPCR - 450);
+        }
+    } else if (data.type === "pes") {
+        if (!oneSegLaunched && cProfile) {
+            return;
+        }
+        const pes = Buffer.from(data.data, "base64");
+        const svgProvider = new SVGProvider(pes, 0);
+        if (pes[0] === 0x80) {
+            svgProvider.render({
+                ...captionOption,
+                svg: ccSVG,
+            });
+        } else if (pes[0] === 0x81) {
+            svgProvider.render({
+                ...captionOption,
+                svg: superSVG,
+                data_identifier: 0x81,
+            });
         }
     } else if (data.type === "key") {
         remoteControlStatusContainer.style.visibility = "visible";

@@ -12,6 +12,8 @@
 #include "InputDialog.h"
 #include "OneSeg.h"
 #include <shellapi.h>
+#include <streams.h>
+#include <bdaiface.h>
 
 using namespace Microsoft::WRL;
 
@@ -24,6 +26,7 @@ using namespace Microsoft::WRL;
 #define WM_APP_RESPONSE (WM_APP + 2)
 #define WM_APP_INPUT (WM_APP + 3)
 #define WM_APP_ENABLE_PLUGIN (WM_APP + 4)
+#define WM_APP_PES (WM_APP + 5)
 
 struct DeferralResponse
 {
@@ -254,6 +257,33 @@ struct Audio
     }
 };
 
+class __declspec(uuid("562C244A-9F8D-497F-A703-D349BBF49C9C")) ARIBCaptionFilter : public CBaseRenderer
+{
+    HWND hMessageWnd;
+public:
+    ARIBCaptionFilter(HWND hMessageWnd, LPUNKNOWN pUnk, HRESULT* phr) : hMessageWnd(hMessageWnd), CBaseRenderer(__uuidof(ARIBCaptionFilter), TEXT("ARIBCaptionFilter"), pUnk, phr)
+    {
+
+    }
+    virtual HRESULT CheckMediaType(const CMediaType* pmt)
+    {
+        if (pmt->majortype == MEDIATYPE_MPEG2_PES)
+            return S_OK;
+        return VFW_E_TYPE_NOT_ACCEPTED;
+    }
+    virtual HRESULT DoRenderSample(IMediaSample* pMediaSample)
+    {
+        HRESULT hr;
+        auto size = pMediaSample->GetSize();
+        LPBYTE data;
+        if (FAILED(hr = pMediaSample->GetPointer(&data)))
+            return hr;
+        auto vec = new std::vector<unsigned char>((unsigned char*)data, (unsigned char*)data + size);
+        PostMessageW(hMessageWnd, WM_APP_PES, 0, (LPARAM)vec);
+        return S_OK;
+    }
+};
+
 // Plugins/TVTDataBroadcastingWV2.tvtp
 class CDataBroadcastingWV2 : public TVTest::CTVTestPlugin, TVTest::CTVTestEventHandler
 {
@@ -285,6 +315,8 @@ class CDataBroadcastingWV2 : public TVTest::CTVTestPlugin, TVTest::CTVTestEventH
     wil::com_ptr<IBasicVideo> basicVideo;
     wil::com_ptr<IBaseFilter> vmr7Renderer;
     wil::com_ptr<IBaseFilter> vmr9Renderer;
+    wil::com_ptr<IBaseFilter> captionRenderer;
+    wil::com_ptr<IMPEG2PIDMap> captionPIDMap;
     bool invisible = false;
     RECT videoRect = {};
     RECT containerRect = {};
@@ -474,6 +506,30 @@ bool CDataBroadcastingWV2::OnServiceUpdate()
             {
                 pesPIDList.insert(serviceInfo.serviceInfo.AudioPID[j]);
             }
+        }
+    }
+    TVTest::ElementaryStreamInfoList captionESList = {};
+    if (this->captionPIDMap && this->m_pApp->GetElementaryStreamInfoList(&captionESList, TVTest::ES_MEDIA_CAPTION, currentService.serviceInfo.ServiceID))
+    {
+        ULONG captions[255] = {};
+        ULONG count = std::min(255uL, (ULONG)captionESList.ESCount);
+        for (auto i = 0; i < count; i++)
+        {
+            captions[i] = captionESList.ESList[i].PID;
+        }
+        this->captionPIDMap->MapPID(count, captions, MEDIA_ELEMENTARY_STREAM);
+        this->m_pApp->MemoryFree(captionESList.ESList);
+    }
+    else if (this->captionPIDMap)
+    {
+        ULONG pid = currentService.serviceInfo.SubtitlePID;
+        if (pid == 0)
+        {
+            this->captionPIDMap->MapPID(0, nullptr, MEDIA_ELEMENTARY_STREAM);
+        }
+        else
+        {
+            this->captionPIDMap->MapPID(1, &pid, MEDIA_ELEMENTARY_STREAM);
         }
     }
     // 動画、音声のPESは不要なので削っておく
@@ -763,6 +819,44 @@ LRESULT CALLBACK CDataBroadcastingWV2::MessageWndProc(HWND hWnd, UINT uMsg, WPAR
         }
         break;
     }
+    case WM_APP_PES:
+    {
+        auto vec = (std::vector<unsigned char>*)lParam;
+
+        WCHAR head[] = LR"({"type":"pes","data":")";
+        WCHAR tail[] = LR"("})";
+        auto packetBlockSize = vec->size();
+        auto packetSize = pThis->packetQueue.packetSize;
+        size_t size = _countof(head) - 1 + (packetBlockSize + 2) / 3 * 4 /* Base64 */ + _countof(tail) + 1;
+        if (pThis->packetsToJsonBuf.size() < size)
+        {
+            pThis->packetsToJsonBuf.resize(size);
+        }
+        {
+            auto buf = pThis->packetsToJsonBuf.data();
+            wcscpy_s(buf, size, head);
+            size_t pos = 0;
+            pos += wcslen(head);
+            auto buffer = vec->data();
+            static const WCHAR base64[66] = L"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+            for (size_t i = 0; i < packetBlockSize; i += 3)
+            {
+                buf[pos] = base64[buffer[i] >> 2];
+                pos += 1;
+                buf[pos] = base64[((buffer[i] & 3) << 4) | (i + 1 < packetBlockSize ? buffer[i + 1] >> 4 : 0)];
+                pos += 1;
+                buf[pos] = base64[i + 1 < packetBlockSize ? ((buffer[i + 1] & 15) << 2) |
+                    (i + 2 < packetBlockSize ? buffer[i + 2] >> 6 : 0) : 64];
+                pos += 1;
+                buf[pos] = base64[i + 2 < packetBlockSize ? buffer[i + 2] & 63 : 64];
+                pos += 1;
+            }
+            wcscpy_s(buf + pos, size - pos, tail);
+            auto hr = pThis->webView->PostWebMessageAsJson(buf);
+        }
+        delete vec;
+        break;
+    }
     case WM_APP_RESPONSE:
     {
         auto response = std::unique_ptr<DeferralResponse>((DeferralResponse*)lParam);
@@ -898,6 +992,8 @@ HWND CDataBroadcastingWV2::GetFullscreenWindow()
 
 void CDataBroadcastingWV2::OnFilterGraphInitialized(TVTest::FilterGraphInfo* pInfo)
 {
+    wil::com_ptr<IBaseFilter> demultiplexerFilter;
+    wil::com_ptr<IMpeg2Demultiplexer> demultiplexer;
     bool isRenderless = false;
     // VMR9
     if (SUCCEEDED(pInfo->pGraphBuilder->FindFilterByName(L"VMR9", this->vmr9Renderer.put())))
@@ -911,6 +1007,46 @@ void CDataBroadcastingWV2::OnFilterGraphInitialized(TVTest::FilterGraphInfo* pIn
             this->vmr9Renderer = nullptr;
             this->m_pApp->AddLog(L"VMR9 (Renderless)は非推奨", TVTest::LOG_TYPE_WARNING);
             isRenderless = true;
+        }
+    }
+    if (SUCCEEDED(pInfo->pGraphBuilder->FindFilterByName(L"MPEG2Demultiplexer", demultiplexerFilter.put())))
+    {
+        wil::com_ptr<IPin> captionPin;
+        AM_MEDIA_TYPE mediaType = { };
+        mediaType.majortype = MEDIATYPE_MPEG2_PES;
+        mediaType.subtype = MEDIASUBTYPE_NULL;
+        mediaType.formattype = FORMAT_None;
+        demultiplexer = demultiplexerFilter.try_query<IMpeg2Demultiplexer>();
+        if (SUCCEEDED(demultiplexer->CreateOutputPin(&mediaType, (LPWSTR)L"Caption Pin", captionPin.put())))
+        {
+            HRESULT hr = S_OK;
+            auto c = new ARIBCaptionFilter(this->hMessageWnd, nullptr, &hr);
+            this->captionRenderer = c;
+            hr = pInfo->pGraphBuilder->AddFilter(c, L"ARIBCaptionFilter");
+            wil::com_ptr<IEnumPins> enumPins;
+            ULONG fetched;
+            if (SUCCEEDED(c->EnumPins(enumPins.put())))
+            {
+                wil::com_ptr<IPin> pin;
+                while (enumPins->Next(1, pin.put(), &fetched) == S_OK)
+                {
+                    PIN_INFO pinInfo;
+                    if (FAILED(pin->QueryPinInfo(&pinInfo)))
+                    {
+                        continue;
+                    }
+                    if (pinInfo.pFilter)
+                    {
+                        pinInfo.pFilter->Release();
+                    }
+                    if (pinInfo.dir == PINDIR_INPUT)
+                    {
+                        pInfo->pGraphBuilder->Connect(captionPin.get(), pin.get());
+                        this->captionPIDMap = captionPin.try_query<IMPEG2PIDMap>();
+                        this->OnServiceUpdate();
+                    }
+                }
+            }
         }
     }
     // VMR7
@@ -1027,6 +1163,8 @@ void CDataBroadcastingWV2::OnFilterGraphFinalize(TVTest::FilterGraphInfo* pInfo)
     this->vmr7Renderer = nullptr;
     this->vmr9Renderer = nullptr;
     this->hVideoWnd = nullptr;
+    this->captionPIDMap = nullptr;
+    this->captionRenderer = nullptr;
 }
 
 void CDataBroadcastingWV2::InitWebView2()
