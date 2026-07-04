@@ -79,7 +79,7 @@ NuGetパッケージを復元しTVTDataBroadcastingWV2.slnをビルド
 
 ### web-bmlのビルド
 
-現状web-bmlを使うために無理やりサブモジュールで参照していてさらにそのweb-bmlもサブモジュールを持っているため以下のコマンドで初期化/更新
+現状web-bmlを使うために無理やりサブモジュールで参照しているため以下のコマンドで初期化/更新
 
 ```sh
 git submodule update --init --recursive
@@ -89,14 +89,13 @@ git submodule update --init --recursive
 
 ```sh
 cd browser
-npm i
-npm -w @chinachu/aribts run build
+npm ci
 npm run build
 ```
 
 フォントをコピー
 ```bat
-copy web-bml\fonts\*.woff2 dist\
+copy browser\web-bml\fonts\*.woff2 browser\dist\
 ```
 
 * Plugins/
@@ -106,8 +105,9 @@ copy web-bml\fonts\*.woff2 dist\
             * TVTDataBroadcastingWV2.html
             * dist/
                 * TVTDataBroadcastingWV2.js
-                * Kosugi-Regular.ttf
-                * KosugiMaru-Regular.ttf
+                * Kosugi-Regular.woff2
+                * KosugiMaru-Bold.woff2
+                * KosugiMaru-Regular.woff2
 
 のように配置するかTVTDataBroadcastingWV2.tvtpと同じディレクトリにTVTDataBroadcastingWV2.iniを作り以下のようにする
 

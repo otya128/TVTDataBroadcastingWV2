@@ -69,10 +69,6 @@ jobs:
       working-directory: ./browser/
       run: npm ci
 
-    - name: Build depends
-      working-directory: ./browser/
-      run: npm -w @chinachu/aribts run build
-
     - name: Build web-bml
       working-directory: ./browser/
       run: npm run build
