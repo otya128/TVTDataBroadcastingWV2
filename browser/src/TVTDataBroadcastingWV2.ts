@@ -1,7 +1,8 @@
-import { ComponentPMT, ResponseMessage } from "../web-bml/server/ws_api";
-import { BMLBrowser, BMLBrowserFontFace, EPG, Indicator, IP, InputApplication, InputCancelReason, InputCharacterType } from "../web-bml/client/bml_browser";
-import { decodeTS } from "../web-bml/server/decode_ts";
-import { CaptionPlayer } from "../web-bml/client/player/caption_player";
+import type { ComponentPMT, ResponseMessage } from "web-bml/protocol";
+import { BMLBrowser, BMLBrowserFontFace, EPG, Indicator, IP, InputApplication, InputCancelReason, InputCharacterType } from "web-bml";
+import { decodeTS } from "web-bml/ts";
+import { CaptionPlayer } from "./caption_player";
+import { Buffer } from "buffer";
 
 declare global {
     interface Window {
@@ -456,8 +457,6 @@ const tsStream = decodeTS({
     parsePES: true,
 });
 
-tsStream.on("data", () => { });
-
 type ToWebViewMessage = {
     type: "stream",
     data: number[],
@@ -520,7 +519,7 @@ function onWebViewMessage(data: ToWebViewMessage, reply: (data: FromWebViewMessa
         }
         const ts = data.data;
         const prevPCR = pcr;
-        tsStream.parse(Buffer.from(ts));
+        tsStream.push(Buffer.from(ts));
         const curPCR = pcr;
         if (prevPCR !== curPCR && curPCR != null) {
             player.updateTime(curPCR - 450);
@@ -531,7 +530,7 @@ function onWebViewMessage(data: ToWebViewMessage, reply: (data: FromWebViewMessa
         }
         const ts = data.data;
         const prevPCR = pcr;
-        tsStream.parse(Buffer.from(ts, "base64"));
+        tsStream.push(Buffer.from(ts, "base64"));
         const curPCR = pcr;
         if (prevPCR !== curPCR && curPCR != null) {
             player.updateTime(curPCR - 450);

@@ -28,8 +28,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-      with:
-        submodules: 'recursive'
 
     - name: Setup variable
       env:
@@ -86,8 +84,8 @@ jobs:
           copy -ErrorAction:SilentlyContinue Release/TVTDataBroadcastingWV2.tvtp artifact/$dir/ || copy $env:PLATFORM/Release/TVTDataBroadcastingWV2.tvtp artifact/$dir/
           mkdir artifact/$dir/TVTDataBroadcastingWV2/resources/dist/
           copy browser/dist/TVTDataBroadcastingWV2.js artifact/$dir/TVTDataBroadcastingWV2/resources/dist/
-          copy browser/web-bml/fonts/*.woff2 artifact/$dir/TVTDataBroadcastingWV2/resources/dist/
-          copy browser/web-bml/fonts/LICENSE.txt artifact/$dir/TVTDataBroadcastingWV2/resources/dist/fonts-LICENSE.txt
+          copy browser/node_modules/web-bml-fonts/*.woff2 artifact/$dir/TVTDataBroadcastingWV2/resources/dist/
+          copy browser/node_modules/web-bml-fonts/LICENSE.txt artifact/$dir/TVTDataBroadcastingWV2/resources/dist/fonts-LICENSE.txt
           copy browser/dist/TVTDataBroadcastingWV2.js.LICENSE.txt artifact/$dir/TVTDataBroadcastingWV2/resources/dist/
           copy browser/TVTDataBroadcastingWV2.html artifact/$dir/TVTDataBroadcastingWV2/resources/
 
