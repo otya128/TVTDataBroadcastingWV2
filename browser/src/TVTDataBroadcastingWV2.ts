@@ -519,7 +519,7 @@ function onWebViewMessage(data: ToWebViewMessage, reply: (data: FromWebViewMessa
         }
         const ts = data.data;
         const prevPCR = pcr;
-        tsStream.push(Buffer.from(ts));
+        tsStream.push(Uint8Array.from(ts));
         const curPCR = pcr;
         if (prevPCR !== curPCR && curPCR != null) {
             player.updateTime(curPCR - 450);
@@ -530,7 +530,7 @@ function onWebViewMessage(data: ToWebViewMessage, reply: (data: FromWebViewMessa
         }
         const ts = data.data;
         const prevPCR = pcr;
-        tsStream.push(Buffer.from(ts, "base64"));
+        tsStream.push(fromBase64(ts));
         const curPCR = pcr;
         if (prevPCR !== curPCR && curPCR != null) {
             player.updateTime(curPCR - 450);
