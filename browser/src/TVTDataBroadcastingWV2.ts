@@ -2,7 +2,6 @@ import type { ComponentPMT, ResponseMessage } from "web-bml/protocol";
 import { BMLBrowser, BMLBrowserFontFace, EPG, Indicator, IP, InputApplication, InputCancelReason, InputCharacterType } from "web-bml";
 import { decodeTS } from "web-bml/ts";
 import { CaptionPlayer } from "./caption_player";
-import { Buffer } from "buffer";
 
 declare global {
     interface Window {
@@ -507,6 +506,14 @@ type ToWebViewMessage = {
 // 1分間無操作であればデータ取得中の表示を消す
 let remoteControlStatusTimeoutMillis = 60 * 1000;
 let remoteControlStatusTimeout = Number.MAX_VALUE;
+
+function fromBase64(input: string): Uint8Array<ArrayBuffer> {
+    if ("fromBase64" in globalThis.Uint8Array) {
+        return Uint8Array.fromBase64(input);
+    } else {
+        return Uint8Array.from(window.atob(input), c => c.charCodeAt(0));
+    }
+}
 
 function onWebViewMessage(data: ToWebViewMessage, reply: (data: FromWebViewMessage) => void) {
     if (!cProfile && data.type !== "key" && performance.now() >= remoteControlStatusTimeout) {
