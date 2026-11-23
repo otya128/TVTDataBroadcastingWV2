@@ -5,6 +5,7 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
+  workflow_dispatch:
 
 env:
   # Path to the solution file relative to the root of the project.
@@ -81,9 +82,12 @@ jobs:
           copy LICENSE artifact/$dir/TVTDataBroadcastingWV2-LICENSE
           copy LICENSE.nlohmann.json.txt artifact/$dir/TVTDataBroadcastingWV2-LICENSE.json.txt
           copy README.md artifact/$dir/TVTDataBroadcastingWV2-README.txt
+          copy README_HYBRIDCAST.md artifact/$dir/
+          copy TVTDataBroadcastingWV2.ini.sample artifact/$dir/
           copy -ErrorAction:SilentlyContinue Release/TVTDataBroadcastingWV2.tvtp artifact/$dir/ || copy $env:PLATFORM/Release/TVTDataBroadcastingWV2.tvtp artifact/$dir/
           mkdir artifact/$dir/TVTDataBroadcastingWV2/resources/dist/
           copy browser/dist/TVTDataBroadcastingWV2.js artifact/$dir/TVTDataBroadcastingWV2/resources/dist/
+          copy browser/dist/hybridcast_api.js artifact/$dir/TVTDataBroadcastingWV2/resources/dist/
           copy browser/node_modules/web-bml-fonts/*.woff2 artifact/$dir/TVTDataBroadcastingWV2/resources/dist/
           copy browser/node_modules/web-bml-fonts/LICENSE.txt artifact/$dir/TVTDataBroadcastingWV2/resources/dist/fonts-LICENSE.txt
           copy browser/dist/TVTDataBroadcastingWV2.js.LICENSE.txt artifact/$dir/TVTDataBroadcastingWV2/resources/dist/
